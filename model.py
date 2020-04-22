@@ -417,7 +417,8 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3)
         # size_in = K.int_shape(x)
         # size_out = K.int_shape(skip1)
         # x = UpSampling2D(size=(size_out[1]//size_in[1],size_out[2]//size_in[2]),interpolation='bilinear')(x)
-        x = Lambda(lambda xx: tf.image.resize(xx, skip1.shape[1:3], method='bilinear', align_corners=True))(x)
+        skip_size = tf.keras.backend.int_shape(skip1)
+        x = Lambda(lambda xx: tf.image.resize(xx, skip_size[1:3], method='bilinear', align_corners=True))(x)
         dec_skip1 = Conv2D(48, (1, 1), padding='same',
                            use_bias=False, name='feature_projection0')(skip1)
         dec_skip1 = BatchNormalization(
