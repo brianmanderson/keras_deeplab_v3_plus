@@ -18,30 +18,14 @@ https://github.com/JonathanCMitchell/mobilenet_v2_keras
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
 import tensorflow as tf
-# version_split = tf.__version__.split('.')
-# if version_split[0] == '2' and int(version_split[1]) > 1:
-#     from tensorflow.keras.mixed_precision import experimental as mixed_precision
-#     policy = mixed_precision.Policy('mixed_float16')
-#     mixed_precision.set_policy(policy)
 from tensorflow.keras.models import Model
-from tensorflow.keras import layers
-from tensorflow.keras.layers import Input
-from tensorflow.keras.layers import Lambda
-from tensorflow.keras.layers import Activation
-from tensorflow.keras.layers import Concatenate
-from tensorflow.keras.layers import Add
-from tensorflow.keras.layers import Dropout
-from tensorflow.keras.layers import BatchNormalization
-from tensorflow.keras.layers import Conv2D
-from tensorflow.keras.layers import DepthwiseConv2D
-from tensorflow.keras.layers import ZeroPadding2D
-from tensorflow.keras.layers import GlobalAveragePooling2D
-from tensorflow.keras.utils import get_file
-from tensorflow.keras.utils import get_source_inputs
+
+from tensorflow.python.keras.models import Model
+from tensorflow.keras.layers import Input, Lambda, Activation, Concatenate, Add, Dropout, BatchNormalization, Conv2D,\
+    DepthwiseConv2D, ZeroPadding2D, GlobalAveragePooling2D
+from tensorflow.keras.utils import get_source_inputs, get_file
 from tensorflow.keras.applications.imagenet_utils import preprocess_input
-import tensorflow.keras.backend as K
 
 WEIGHTS_PATH_X = "https://github.com/bonlime/keras-deeplab-v3-plus/releases/download/1.1/deeplabv3_xception_tf_dim_ordering_tf_kernels.h5"
 WEIGHTS_PATH_MOBILE = "https://github.com/bonlime/keras-deeplab-v3-plus/releases/download/1.1/deeplabv3_mobilenetv2_tf_dim_ordering_tf_kernels.h5"
@@ -149,9 +133,9 @@ def _xception_block(inputs, depth_list, prefix, skip_connection_type, stride,
                                 kernel_size=1,
                                 stride=stride)
         shortcut = BatchNormalization(name=prefix + '_shortcut_BN')(shortcut)
-        outputs = layers.add([residual, shortcut])
+        outputs = Add()([residual, shortcut])
     elif skip_connection_type == 'sum':
-        outputs = layers.add([residual, inputs])
+        outputs = Add()([residual, inputs])
     elif skip_connection_type == 'none':
         outputs = residual
     if return_skip:
@@ -373,9 +357,9 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3)
     b4 = BatchNormalization(name='image_pooling_BN', epsilon=1e-5)(b4)
     b4 = Activation('elu')(b4)
     # upsample. have to use compat because of the option align_corners
-    size_before = x.shape
 
-    b4 = Lambda(lambda x: tf.image.resize_with_pad(x, target_height=size_before[1], target_width=size_before[2]))(b4)
+    b4 = Lambda(lambda x: tf.image.resize(x, (int(x.shape[1]),int(x.shape[2])),
+                                          method='bilinear', align_corners=True))(b4)
     # b4 = UpSampling2D(size=(size_before[1],size_before[2]),interpolation='bilinear')(b4)
     # simple 1x1
     b0 = Conv2D(256, (1, 1), padding='same', use_bias=False, name='aspp0')(x)
@@ -402,18 +386,13 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3)
     x = Conv2D(256, (1, 1), padding='same',
                use_bias=False, name='concat_projection')(x)
     x = BatchNormalization(name='concat_projection_BN', epsilon=1e-5)(x)
-    x = Dropout(0.1)(x)
     x = Activation('elu')(x)
+    x = Dropout(0.1)(x)
     # DeepLab v.3+ decoder
 
     if backbone == 'xception':
         # Feature projection
-        # x4 (x2) block
-        # size_in = K.int_shape(x)
-        # size_out = K.int_shape(skip1)
-        # x = UpSampling2D(size=(size_out[1]//size_in[1],size_out[2]//size_in[2]),interpolation='bilinear')(x)
-        skip_size = K.int_shape(skip1)
-        x = Lambda(lambda xx: tf.image.resize_with_pad(xx, target_height=skip_size[1], target_width=skip_size[2]))(x)
+        x = Lambda(lambda xx: tf.image.resize(xx, (int(skip1.shape[1]),int(skip1.shape[2])), method='bilinear', align_corners=True))(x)
         dec_skip1 = Conv2D(48, (1, 1), padding='same',
                            use_bias=False, name='feature_projection0')(skip1)
         dec_skip1 = BatchNormalization(
@@ -426,22 +405,13 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3)
                        depth_activation=True, epsilon=1e-5)
 
     # you can use it with arbitary number of classes
-    model = return_model(x, classes, img_input, input_tensor, activation, weights, backbone)
-    return model
-
-
-def return_model(x, classes, img_input, input_tensor, activation, weights, backbone):
     if (weights == 'pascal_voc' and classes == 21) or (weights == 'cityscapes' and classes == 19):
         last_layer_name = 'logits_semantic'
     else:
         last_layer_name = 'custom_logits_semantic'
     x = Conv2D(classes, (1, 1), padding='same', name=last_layer_name)(x)
 
-    # size_in = K.int_shape(x)
-    # size_out = K.int_shape(img_input)
-    # x = UpSampling2D(size=(size_out[1] // size_in[1], size_out[2] // size_in[2]), interpolation='bilinear')(x)
-    size_before3 = K.int_shape(img_input)
-    x = Lambda(lambda xx: tf.image.resize_with_pad(xx, target_height=size_before3[1], target_width=size_before3[2]))(x)
+    x = Lambda(lambda xx: tf.image.resize(xx, (int(img_input.shape[1]),int(img_input.shape[2])), method='bilinear', align_corners=True))(x)
     # Ensure that the model takes into account
     # any potential predecessors of `input_tensor`.
     if input_tensor is not None:
@@ -451,9 +421,6 @@ def return_model(x, classes, img_input, input_tensor, activation, weights, backb
 
     if activation in {'softmax', 'sigmoid'}:
         x = Activation(activation)(x)
-    # version_split = tf.__version__.split('.')
-    # if version_split[0] == '2' and int(version_split[1]) > 1:
-    #     x = Activation('linear', dtype='float32')(x)
     model = Model(inputs=inputs, outputs=x, name='deeplabv3plus')
 
     # load weights
