@@ -416,9 +416,6 @@ def return_model(x, classes, img_input, input_tensor, activation, weights, backb
         last_layer_name = 'custom_logits_semantic'
     x = Conv2D(classes, (1, 1), padding='same', name=last_layer_name)(x)
 
-    # size_in = K.int_shape(x)
-    # size_out = K.int_shape(img_input)
-    # x = UpSampling2D(size=(size_out[1] // size_in[1], size_out[2] // size_in[2]), interpolation='bilinear')(x)
     size_before3 = img_input.shape
     x = Lambda(
         lambda xx: tf.image.resize_with_pad(xx, target_height=size_before3[1], target_width=size_before3[2]))(x)
