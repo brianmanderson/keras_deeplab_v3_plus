@@ -356,10 +356,8 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3)
                 use_bias=False, name='image_pooling')(b4)
     b4 = BatchNormalization(name='image_pooling_BN', epsilon=1e-5)(b4)
     b4 = Activation('elu')(b4)
-    # upsample. have to use compat because of the option align_corners
 
-    b4 = Lambda(lambda x: tf.image.resize(x, (int(x.shape[1]),int(x.shape[2])),
-                                          method='bilinear', align_corners=True))(b4)
+    b4 = Lambda(lambda x: tf.image.resize(x, (int(x.shape[1]),int(x.shape[2])), method='bilinear'))(b4)
     # b4 = UpSampling2D(size=(size_before[1],size_before[2]),interpolation='bilinear')(b4)
     # simple 1x1
     b0 = Conv2D(256, (1, 1), padding='same', use_bias=False, name='aspp0')(x)
@@ -392,7 +390,7 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3)
 
     if backbone == 'xception':
         # Feature projection
-        x = Lambda(lambda xx: tf.image.resize(xx, (int(skip1.shape[1]),int(skip1.shape[2])), method='bilinear', align_corners=True))(x)
+        x = Lambda(lambda xx: tf.image.resize(xx, (int(skip1.shape[1]),int(skip1.shape[2])), method='bilinear'))(x)
         dec_skip1 = Conv2D(48, (1, 1), padding='same',
                            use_bias=False, name='feature_projection0')(skip1)
         dec_skip1 = BatchNormalization(
@@ -411,7 +409,7 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3)
         last_layer_name = 'custom_logits_semantic'
     x = Conv2D(classes, (1, 1), padding='same', name=last_layer_name)(x)
 
-    x = Lambda(lambda xx: tf.image.resize(xx, (int(img_input.shape[1]),int(img_input.shape[2])), method='bilinear', align_corners=True))(x)
+    x = Lambda(lambda xx: tf.image.resize(xx, (int(img_input.shape[1]),int(img_input.shape[2])), method='bilinear'))(x)
     # Ensure that the model takes into account
     # any potential predecessors of `input_tensor`.
     if input_tensor is not None:
