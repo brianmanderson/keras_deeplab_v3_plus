@@ -358,7 +358,8 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3)
     b4 = BatchNormalization(name='image_pooling_BN', epsilon=1e-5)(b4)
     b4 = Activation('elu')(b4)
     previous_shape = x.shape
-    b4 = Lambda(lambda x: tf.image.resize(x, (int(previous_shape[1]),int(previous_shape[2]))))(b4)
+    b4 = Lambda(lambda x: tf.compat.v1.image.resize(x, (int(previous_shape[1]),int(previous_shape[2])),
+                                                    align_corners=True))(b4)
     # b4 = UpSampling2D(size=(size_before[1],size_before[2]),interpolation='bilinear')(b4)
     # simple 1x1
     b0 = Conv2D(256, (1, 1), padding='same', use_bias=False, name='aspp0')(x)
@@ -392,7 +393,8 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3)
     if backbone == 'xception':
         # Feature projection
         skip1_shape = skip1.shape
-        x = Lambda(lambda x: tf.image.resize(x, (int(skip1_shape[1]), int(skip1_shape[2]))))(x)
+        x = Lambda(lambda x: tf.compat.v1.image.resize(x, (int(skip1_shape[1]), int(skip1_shape[2])),
+                                                       align_corners=True))(x)
         dec_skip1 = Conv2D(48, (1, 1), padding='same',
                            use_bias=False, name='feature_projection0')(skip1)
         dec_skip1 = BatchNormalization(
@@ -415,7 +417,8 @@ def return_model(x, classes, img_input, input_tensor, activation, weights, backb
     x = Conv2D(classes, (1, 1), padding='same', name=last_layer_name)(x)
 
     size_before3 = img_input.shape
-    x = Lambda(lambda xx: tf.image.resize(xx, (int(size_before3[1]), int(size_before3[2]))))(x)
+    x = Lambda(lambda xx: tf.compat.v1.image.resize(xx, (int(size_before3[1]), int(size_before3[2])),
+                                                    align_corners=True))(x)
     # Ensure that the model takes into account
     # any potential predecessors of `input_tensor`.
     if input_tensor is not None:
