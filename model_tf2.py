@@ -199,7 +199,7 @@ def _inverted_res_block(inputs, expansion, stride, alpha, filters, block_id, ski
 
 
 def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3), classes=21, backbone='mobilenetv2',
-              OS=16, alpha=1., activation=None):
+              OS=16, alpha=1., activation=None, dual_output=False):
     """ Instantiates the Deeplabv3+ architecture
     Optionally loads weights pre-trained
     on PASCAL VOC or Cityscapes. This model is available for TensorFlow only.
@@ -405,20 +405,27 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3)
                        depth_activation=True, epsilon=1e-5)
         x = SepConv_BN(x, 256, 'decoder_conv1',
                        depth_activation=True, epsilon=1e-5)
-    model = return_model(x, classes, img_input, input_tensor, activation, weights, backbone)
+    model = return_model(x, classes, img_input, input_tensor, activation, weights, backbone, dual_output)
     return model
 
 
-def return_model(x, classes, img_input, input_tensor, activation, weights, backbone):
+def return_model(x, classes, img_input, input_tensor, activation, weights, backbone, dual_output=False):
     if (weights == 'pascal_voc' and classes == 21) or (weights == 'cityscapes' and classes == 19):
         last_layer_name = 'logits_semantic'
     else:
         last_layer_name = 'custom_logits_semantic'
+    lung_output = None
+    if dual_output:
+        lung_output = Conv2D(2, (1, 1), padding='same', name='lung_layer')(x)
     x = Conv2D(classes, (1, 1), padding='same', name=last_layer_name)(x)
 
     size_before3 = img_input.shape
     x = Lambda(lambda xx: tf.compat.v1.image.resize(xx, (int(size_before3[1]), int(size_before3[2])),
                                                     align_corners=True))(x)
+    if lung_output is not None:
+        lung_output = Lambda(lambda xx: tf.compat.v1.image.resize(xx, (int(size_before3[1]), int(size_before3[2])),
+                                                                  align_corners=True))(lung_output)
+        lung_output = Activation('softmax', name='Lung_Prediction')(lung_output)
     # Ensure that the model takes into account
     # any potential predecessors of `input_tensor`.
     if input_tensor is not None:
@@ -427,11 +434,14 @@ def return_model(x, classes, img_input, input_tensor, activation, weights, backb
         inputs = img_input
 
     if activation in {'softmax', 'sigmoid'}:
-        x = Activation(activation)(x)
+        x = Activation(activation, name='L_R_Lung_Prediction')(x)
     # version_split = tf.__version__.split('.')
     # if version_split[0] == '2' and int(version_split[1]) > 1:
     #     x = Activation('linear', dtype='float32')(x)
-    model = Model(inputs=inputs, outputs=x, name='deeplabv3plus')
+    if lung_output is not None:
+        model = Model(inputs=[inputs], outputs=[x, lung_output], name='deeplabv3plus')
+    else:
+        model = Model(inputs=[inputs], outputs=x, name='deeplabv3plus')
 
     # load weights
 
