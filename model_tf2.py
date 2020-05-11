@@ -198,6 +198,23 @@ def _inverted_res_block(inputs, expansion, stride, alpha, filters, block_id, ski
     return x
 
 
+class ExpandDimension(tf.keras.layers.Layer):
+    def __init__(self):
+        super(ExpandDimension, self).__init__()
+
+    def call(self, inputs, **kwargs):
+        return tf.expand_dims(inputs, 1)
+
+
+class Resize(tf.keras.layers.Layer):
+    def __init__(self, row, height):
+        super(Resize, self).__init__()
+        self.row, self.height = int(row), int(height)
+
+    def call(self, inputs, **kwargs):
+        return tf.compat.v1.image.resize(inputs, (self.row, self.height), align_corners=True)
+
+
 def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3), classes=21, backbone='mobilenetv2',
               OS=16, alpha=1., activation=None, dual_output=False):
     """ Instantiates the Deeplabv3+ architecture
@@ -300,7 +317,6 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3)
                    use_bias=False, name='Conv')(img_input)
         x = BatchNormalization(
             epsilon=1e-3, momentum=0.999, name='Conv_BN')(x)
-        # x = Lambda(lambda x: Activation(relu(x, max_value=6), name='Conv_Relu6'))(x)
         x = Activation(tf.nn.relu6, name='Conv_Relu6')(x)
         x = _inverted_res_block(x, filters=16, alpha=alpha, stride=1,
                                 expansion=1, block_id=0, skip_connection=False)
@@ -351,16 +367,16 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3)
     # Image Feature branch
     b4 = GlobalAveragePooling2D()(x)
     # from (b_size, channels)->(b_size, 1, 1, channels)
-    b4 = Lambda(lambda x: tf.expand_dims(x, 1))(b4)
-    b4 = Lambda(lambda x: tf.expand_dims(x, 1))(b4)
+    b4 = ExpandDimension()(b4)
+    b4 = ExpandDimension()(b4)
     b4 = Conv2D(256, (1, 1), padding='same',
                 use_bias=False, name='image_pooling')(b4)
     b4 = BatchNormalization(name='image_pooling_BN', epsilon=1e-5)(b4)
     b4 = Activation('elu')(b4)
     previous_shape = x.shape
-    b4 = Lambda(lambda x: tf.compat.v1.image.resize(x, (int(previous_shape[1]),int(previous_shape[2])),
-                                                    align_corners=True))(b4)
-    # b4 = UpSampling2D(size=(size_before[1],size_before[2]),interpolation='bilinear')(b4)
+    b4 = Resize(int(previous_shape[1]),int(previous_shape[2]))(b4)
+    # b4 = Lambda(lambda x: tf.compat.v1.image.resize(x, (int(previous_shape[1]),int(previous_shape[2])),
+    #                                                 align_corners=True))(b4)
     # simple 1x1
     b0 = Conv2D(256, (1, 1), padding='same', use_bias=False, name='aspp0')(x)
     b0 = BatchNormalization(name='aspp0_BN', epsilon=1e-5)(b0)
@@ -393,8 +409,9 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3)
     if backbone == 'xception':
         # Feature projection
         skip1_shape = skip1.shape
-        x = Lambda(lambda x: tf.compat.v1.image.resize(x, (int(skip1_shape[1]), int(skip1_shape[2])),
-                                                       align_corners=True))(x)
+        x = Resize(int(skip1_shape[1]), int(skip1_shape[2]))(x)
+        # x = Lambda(lambda x: tf.compat.v1.image.resize(x, (int(skip1_shape[1]), int(skip1_shape[2])),
+        #                                                align_corners=True))(x)
         dec_skip1 = Conv2D(48, (1, 1), padding='same',
                            use_bias=False, name='feature_projection0')(skip1)
         dec_skip1 = BatchNormalization(
@@ -420,11 +437,13 @@ def return_model(x, classes, img_input, input_tensor, activation, weights, backb
     x = Conv2D(classes, (1, 1), padding='same', name=last_layer_name)(x)
 
     size_before3 = img_input.shape
-    x = Lambda(lambda xx: tf.compat.v1.image.resize(xx, (int(size_before3[1]), int(size_before3[2])),
-                                                    align_corners=True))(x)
+    x = Resize(int(size_before3[1]), int(size_before3[2]))(x)
+    # x = Lambda(lambda xx: tf.compat.v1.image.resize(xx, (int(size_before3[1]), int(size_before3[2])),
+    #                                                 align_corners=True))(x)
     if lung_output is not None:
-        lung_output = Lambda(lambda xx: tf.compat.v1.image.resize(xx, (int(size_before3[1]), int(size_before3[2])),
-                                                                  align_corners=True))(lung_output)
+        lung_output = Resize(int(size_before3[1]), int(size_before3[2]))(lung_output)
+        # lung_output = Lambda(lambda xx: tf.compat.v1.image.resize(xx, (),
+        #                                                           align_corners=True))(lung_output)
         lung_output = Activation('softmax', name='Lung_Prediction')(lung_output)
     # Ensure that the model takes into account
     # any potential predecessors of `input_tensor`.
