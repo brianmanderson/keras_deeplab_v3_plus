@@ -273,7 +273,6 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3)
         img_input = Input(shape=input_shape)
     else:
         img_input = input_tensor
-    img_input = BatchNormalization()(img_input)
 
     if backbone == 'xception':
         if OS == 8:
