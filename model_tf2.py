@@ -214,6 +214,11 @@ class Resize(tf.keras.layers.Layer):
     def call(self, inputs, **kwargs):
         return tf.compat.v1.image.resize(inputs, (self.row, self.height), align_corners=True)
 
+    def get_config(self):
+        config = {'row': self.row, 'height':self.height}
+        base_config = super(Resize, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
+
 
 def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3), classes=21, backbone='mobilenetv2',
               OS=16, alpha=1., activation=None, dual_output=False):
