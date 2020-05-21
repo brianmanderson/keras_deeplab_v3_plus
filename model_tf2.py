@@ -60,16 +60,18 @@ def SepConv_BN(x, filters, prefix, stride=1, kernel_size=3, rate=1, depth_activa
 
     if not depth_activation:
         x = Activation('elu')(x)
+        x = BatchNormalization(name=prefix + '_pointwise_BN', epsilon=epsilon)(x)
     x = DepthwiseConv2D((kernel_size, kernel_size), strides=(stride, stride), dilation_rate=(rate, rate),
                         padding=depth_padding, use_bias=False, name=prefix + '_depthwise')(x)
-    x = BatchNormalization(name=prefix + '_depthwise_BN', epsilon=epsilon)(x)
+
     if depth_activation:
         x = Activation('elu')(x)
+        x = BatchNormalization(name=prefix + '_pointwise_BN', epsilon=epsilon)(x)
     x = Conv2D(filters, (1, 1), padding='same',
                use_bias=False, name=prefix + '_pointwise')(x)
-    x = BatchNormalization(name=prefix + '_pointwise_BN', epsilon=epsilon)(x)
     if depth_activation:
         x = Activation('elu')(x)
+        x = BatchNormalization(name=prefix + '_pointwise_BN', epsilon=epsilon)(x)
 
     return x
 
@@ -135,8 +137,10 @@ def _xception_block(inputs, depth_list, prefix, skip_connection_type, stride,
                                 stride=stride)
         shortcut = BatchNormalization(name=prefix + '_shortcut_BN')(shortcut)
         outputs = layers.add([residual, shortcut])
+        outputs = BatchNormalization()(Activation('elu')(outputs))
     elif skip_connection_type == 'sum':
         outputs = layers.add([residual, inputs])
+        outputs = BatchNormalization()(Activation('elu')(outputs))
     elif skip_connection_type == 'none':
         outputs = residual
     if return_skip:
@@ -163,34 +167,34 @@ def _inverted_res_block(inputs, expansion, stride, alpha, filters, block_id, ski
     prefix = 'expanded_conv_{}_'.format(block_id)
     if block_id:
         # Expand
-
         x = Conv2D(expansion * in_channels, kernel_size=1, padding='same',
                    use_bias=False, activation=None,
                    name=prefix + 'expand')(x)
-        x = BatchNormalization(epsilon=1e-3, momentum=0.999,
-                               name=prefix + 'expand_BN')(x)
         # x = Lambda(lambda x: Activation(relu(x, max_value=6), name=prefix + 'expand_relu'))(x)
         x = Activation(tf.nn.relu6, name=prefix + 'expand_relu')(x)
+        x = BatchNormalization(epsilon=1e-3, momentum=0.999,
+                               name=prefix + 'expand_BN')(x)
     else:
         prefix = 'expanded_conv_'
     # Depthwise
     x = DepthwiseConv2D(kernel_size=3, strides=stride, activation=None,
                         use_bias=False, padding='same', dilation_rate=(rate, rate),
                         name=prefix + 'depthwise')(x)
-    x = BatchNormalization(epsilon=1e-3, momentum=0.999,
-                           name=prefix + 'depthwise_BN')(x)
 
     # x = Lambda(lambda x: Activation(relu(x, max_value=6), name=prefix + 'depthwise_relu'))(x)
     x = Activation(tf.nn.relu6, name=prefix + 'depthwise_relu')(x)
+    x = BatchNormalization(epsilon=1e-3, momentum=0.999,
+                           name=prefix + 'depthwise_BN')(x)
     # Project
     x = Conv2D(pointwise_filters,
                kernel_size=1, padding='same', use_bias=False, activation=None,
                name=prefix + 'project')(x)
-    x = BatchNormalization(epsilon=1e-3, momentum=0.999,
-                           name=prefix + 'project_BN')(x)
 
     if skip_connection:
-        return Add(name=prefix + 'add')([inputs, x])
+        x = Add(name=prefix + 'add')([inputs, x])
+        x = Activation('elu')(x)
+        x = BatchNormalization()(x)
+        return x
 
     # if in_channels == pointwise_filters and stride == 1:
     #    return Add(name='res_connect_' + str(block_id))([inputs, x])
@@ -269,6 +273,7 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3)
         img_input = Input(shape=input_shape)
     else:
         img_input = input_tensor
+    img_input = BatchNormalization()(img_input)
 
     if backbone == 'xception':
         if OS == 8:
@@ -284,12 +289,12 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3)
 
         x = Conv2D(32, (3, 3), strides=(2, 2),
                    name='entry_flow_conv1_1', use_bias=False, padding='same')(img_input)
-        x = BatchNormalization(name='entry_flow_conv1_1_BN')(x)
         x = Activation('elu')(x)
+        x = BatchNormalization(name='entry_flow_conv1_1_BN')(x)
 
         x = _conv2d_same(x, 64, 'entry_flow_conv1_2', kernel_size=3, stride=1)
-        x = BatchNormalization(name='entry_flow_conv1_2_BN')(x)
         x = Activation('elu')(x)
+        x = BatchNormalization(name='entry_flow_conv1_2_BN')(x)
 
         x = _xception_block(x, [128, 128, 128], 'entry_flow_block1',
                             skip_connection_type='conv', stride=2,
@@ -320,9 +325,9 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3)
                    kernel_size=3,
                    strides=(2, 2), padding='same',
                    use_bias=False, name='Conv')(img_input)
+        x = Activation(tf.nn.relu6, name='Conv_Relu6')(x)
         x = BatchNormalization(
             epsilon=1e-3, momentum=0.999, name='Conv_BN')(x)
-        x = Activation(tf.nn.relu6, name='Conv_Relu6')(x)
         x = _inverted_res_block(x, filters=16, alpha=alpha, stride=1,
                                 expansion=1, block_id=0, skip_connection=False)
 
@@ -376,16 +381,16 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3)
     b4 = ExpandDimension()(b4)
     b4 = Conv2D(256, (1, 1), padding='same',
                 use_bias=False, name='image_pooling')(b4)
-    b4 = BatchNormalization(name='image_pooling_BN', epsilon=1e-5)(b4)
     b4 = Activation('elu')(b4)
+    b4 = BatchNormalization(name='image_pooling_BN', epsilon=1e-5)(b4)
     previous_shape = x.shape
     b4 = Resize(int(previous_shape[1]),int(previous_shape[2]))(b4)
     # b4 = Lambda(lambda x: tf.compat.v1.image.resize(x, (int(previous_shape[1]),int(previous_shape[2])),
     #                                                 align_corners=True))(b4)
     # simple 1x1
     b0 = Conv2D(256, (1, 1), padding='same', use_bias=False, name='aspp0')(x)
-    b0 = BatchNormalization(name='aspp0_BN', epsilon=1e-5)(b0)
     b0 = Activation('elu', name='aspp0_activation')(b0)
+    b0 = BatchNormalization(name='aspp0_BN', epsilon=1e-5)(b0)
 
     # there are only 2 branches in mobilenetV2. not sure why
     if backbone == 'xception':
@@ -406,9 +411,9 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3)
 
     x = Conv2D(256, (1, 1), padding='same',
                use_bias=False, name='concat_projection')(x)
-    x = BatchNormalization(name='concat_projection_BN', epsilon=1e-5)(x)
     x = Dropout(0.1)(x)
     x = Activation('elu')(x)
+    x = BatchNormalization(name='concat_projection_BN', epsilon=1e-5)(x)
     # DeepLab v.3+ decoder
 
     if backbone == 'xception':
@@ -419,9 +424,9 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3)
         #                                                align_corners=True))(x)
         dec_skip1 = Conv2D(48, (1, 1), padding='same',
                            use_bias=False, name='feature_projection0')(skip1)
+        dec_skip1 = Activation('elu')(dec_skip1)
         dec_skip1 = BatchNormalization(
             name='feature_projection0_BN', epsilon=1e-5)(dec_skip1)
-        dec_skip1 = Activation('elu')(dec_skip1)
         x = Concatenate()([x, dec_skip1])
         x = SepConv_BN(x, 256, 'decoder_conv0',
                        depth_activation=True, epsilon=1e-5)
@@ -440,7 +445,6 @@ def return_model(x, classes, img_input, input_tensor, activation, weights, backb
     if dual_output:
         lung_output = Conv2D(2, (1, 1), padding='same', name='lung_layer')(x)
     x = Conv2D(classes, (1, 1), padding='same', name=last_layer_name)(x)
-
     size_before3 = img_input.shape
     x = Resize(int(size_before3[1]), int(size_before3[2]))(x)
     # x = Lambda(lambda xx: tf.compat.v1.image.resize(xx, (int(size_before3[1]), int(size_before3[2])),
