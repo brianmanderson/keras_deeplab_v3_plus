@@ -21,7 +21,6 @@ from __future__ import print_function
 import tensorflow as tf
 from tensorflow.keras.models import Model
 
-from tensorflow.python.keras.models import Model
 from tensorflow.keras import layers
 from tensorflow.keras.layers import Input, Lambda, Activation, Concatenate, Add, Dropout, BatchNormalization, Conv2D,\
     DepthwiseConv2D, ZeroPadding2D, GlobalAveragePooling2D
