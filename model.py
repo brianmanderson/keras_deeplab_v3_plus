@@ -30,11 +30,10 @@ from tensorflow.keras.layers import Concatenate
 from tensorflow.keras.layers import Add
 from tensorflow.keras.layers import Dropout
 from tensorflow.keras.layers import BatchNormalization
-from tensorflow.python.keras.layers import Conv2D
+from tensorflow.keras.layers import Conv2D
 from tensorflow.keras.layers import DepthwiseConv2D
 from tensorflow.keras.layers import ZeroPadding2D
 from tensorflow.keras.layers import GlobalAveragePooling2D
-from tensorflow.keras.layers import Lambda
 from tensorflow.keras.utils import get_source_inputs
 from tensorflow.keras.utils import get_file
 from tensorflow.keras import backend as K
@@ -168,7 +167,7 @@ def _make_divisible(v, divisor, min_value=None):
 
 
 def _inverted_res_block(inputs, expansion, stride, alpha, filters, block_id, skip_connection, rate=1):
-    in_channels = inputs.shape[-1]  # inputs._keras_shape[-1]
+    in_channels = inputs.shape[-1].value  # inputs._keras_shape[-1]
     pointwise_conv_filters = int(filters * alpha)
     pointwise_filters = _make_divisible(pointwise_conv_filters, 8)
     x = inputs
@@ -406,11 +405,10 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3)
     if backbone == 'xception':
         # Feature projection
         # x4 (x2) block
-        # size_in = K.int_shape(x)
-        # size_out = K.int_shape(skip1)
-        # x = UpSampling2D(size=(size_out[1]//size_in[1],size_out[2]//size_in[2]),interpolation='bilinear')(x)
         skip_size = tf.keras.backend.int_shape(skip1)
-        x = Lambda(lambda xx: tf.image.resize(xx, skip_size[1:3], method='bilinear', align_corners=True))(x)
+        x = tf.keras.layers.experimental.preprocessing.Resizing(
+                *skip_size[1:3], interpolation="bilinear"
+            )(x)
         dec_skip1 = Conv2D(48, (1, 1), padding='same',
                            use_bias=False, name='feature_projection0')(skip1)
         dec_skip1 = BatchNormalization(
