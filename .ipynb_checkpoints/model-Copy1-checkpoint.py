@@ -281,7 +281,7 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3)
     Optionally loads weights pre-trained
     on PASCAL VOC. This model is available for TensorFlow only,
     and can only be used with inputs following the TensorFlow
-    data format `(width, height, channels)`.
+    Data format `(width, height, channels)`.
     # Arguments
         weights: one of 'pascal_voc' (pre-trained on pascal voc)
             or None (random initialization)
